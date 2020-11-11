@@ -233,6 +233,12 @@ function App() {
               setCurrentBone(event.object.parent)
             }
           })
+
+          dragControls.addEventListener('dragend', event => {
+            console.log('position: ', event.object.parent.position)
+            console.log('rotation: ', event.object.parent.rotation)
+            console.log('scale: ', event.object.parent.scale)
+          })
         }       
         // scene에 skelton helper 추가
         scene.add(skeletonHelper)      
