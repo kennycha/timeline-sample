@@ -30,6 +30,7 @@ function App() {
   const [currentBone, setCurrentBone] = useState(null)  // 현재 드래그한 Bone
 
   const [loadedAnimations, setLoadedAnimations] = useState(null)  // load한 파일의 gltf.animations
+  const [editingAnimation, setEditingAnimation] = useState(null)  // 재생되는 애니메이션
 
   const [aniMixer, setAniMixer] = useState(null)  // animation mixer
   const [togglePlay, setTogglePlay] = useState(false)
@@ -106,6 +107,13 @@ function App() {
     transformControls.addEventListener('dragging-changed', event => {
       cameraControls.enabled = !event.value // 요소 드래그 중에는 카메라 이동 불가하도록 설정
     })
+    // 컨트롤러 달려있는 대상에 변화 발생하면 trigger
+    transformControls.addEventListener('objectChange', (event) => {
+      const currentIndex = 3      
+      // target bone의 속성값을 사용해서 새로운 애니메이션 생성
+      createNewAnimation(event.target.object, event.target.mode, currentIndex)
+    })
+
     // 트랜스폼 컨트롤러 scene에 추가
     scene.add(transformControls)
 
@@ -178,6 +186,7 @@ function App() {
       const loader = new GLTFLoader() // loader 생성
       loader.load(blobURL, (gltf) => {
         setLoadedAnimations(gltf.animations)
+        setEditingAnimation(gltf.animations[0])
         console.log('gltf.animations(check AnimationClip.tracks): ')
         console.log(gltf.animations)
 
@@ -231,13 +240,7 @@ function App() {
             if (currentBone !== event.object.parent) {
               transformControls.attach(event.object.parent)
               setCurrentBone(event.object.parent)
-            }
-          })
-
-          dragControls.addEventListener('dragend', event => {
-            console.log('position: ', event.object.parent.position)
-            console.log('rotation: ', event.object.parent.rotation)
-            console.log('scale: ', event.object.parent.scale)
+            } 
           })
         }       
         // scene에 skelton helper 추가
@@ -303,15 +306,77 @@ function App() {
   const onPlayBtnClick = () => {
     setTogglePlay(!togglePlay)
     
-    const clip = loadedAnimations[0]
+    const clip = editingAnimation
     const action = aniMixer.clipAction(clip)
     action.play()
     
     const update = () => {
       aniMixer.update(0.1)
     }
-    update()
+    
+    setInterval(() => {
+      update()
+    }, 100);
   }
+
+  // 애니메이션 교체 로직
+  const createNewAnimation = (targetBone, currentMode, currentFrame) => {
+    // 현재 컴포넌트 상태 값 가져오는 과정에서 버그(한번 리렌더 된 다음부터 먹힘) 있는데, 본 프로젝트에서 리덕스로 변경할 때 수정할 것
+    let editingTrack
+    let editingTrackIndex
+    let newTrack
+    let newValues
+    let newTracks
+    let newAnimation
+    
+    switch (currentMode) {
+      case 'translate':
+        // 조작한 Bone에 해당하는 track 과 그 인덱스 찾기
+        editingTrack = editingAnimation?.tracks.find(track => track.name === `${targetBone.name}.position`)
+        editingTrackIndex = editingAnimation?.tracks.findIndex(track => track === editingTrack)
+        
+        // 마지막 조작 때의 값으로 new track 생성
+        newValues = editingTrack.values.slice()
+        newValues[currentFrame * 3] = targetBone.position.x
+        newValues[currentFrame * 3 + 1] = targetBone.position.y
+        newValues[currentFrame * 3 + 2] = targetBone.position.z
+
+        newTrack = new THREE.VectorKeyframeTrack(editingTrack.name, editingTrack.times, newValues)   
+        break
+      case 'rotate': 
+        editingTrack = editingAnimation?.tracks.find(track => track.name === `${targetBone.name}.quaternion`)
+        editingTrackIndex = editingAnimation?.tracks.findIndex(track => track === editingTrack)
+        
+        newValues = editingTrack.values.slice()
+        newValues[currentFrame * 4] = targetBone.quaternion.w
+        newValues[currentFrame * 4 + 1] = targetBone.quaternion.x
+        newValues[currentFrame * 4 + 2] = targetBone.quaternion.y
+        newValues[currentFrame * 4 + 3] = targetBone.quaternion.z
+
+        newTrack = new THREE.QuaternionKeyframeTrack(editingTrack.name, editingTrack.times, newValues)
+        break
+      case 'scale':
+        editingTrack = editingAnimation?.tracks.find(track => track.name === `${targetBone.name}.scale`)
+        editingTrackIndex = editingAnimation?.tracks.findIndex(track => track === editingTrack)
+        
+        newValues = editingTrack.values.slice()
+        newValues[currentFrame * 3] = targetBone.scale.x
+        newValues[currentFrame * 3 + 1] = targetBone.scale.y
+        newValues[currentFrame * 3 + 2] = targetBone.scale.z
+
+        newTrack = new THREE.VectorKeyframeTrack(editingTrack.name, editingTrack.times, newValues)
+        break
+      default:
+        break
+    }
+    // newTracks 생성 후 다시 newAnimation 생성
+    // EditingAnimation으로 set하는데 redux 연결할 때 주의 필요
+    newTracks = editingAnimation.tracks.slice()
+    newTracks[editingTrackIndex] = newTrack
+    newAnimation = new THREE.AnimationClip(editingAnimation.name, editingAnimation.duration, newTracks)
+    setEditingAnimation(newAnimation)
+  }
+
 
   return (
     <>
