@@ -107,12 +107,15 @@ function App() {
     transformControls.addEventListener('dragging-changed', event => {
       cameraControls.enabled = !event.value // 요소 드래그 중에는 카메라 이동 불가하도록 설정
     })
-    // 컨트롤러 달려있는 대상에 변화 발생하면 trigger
-    transformControls.addEventListener('objectChange', (event) => {
+
+    // 컨트롤러 달려있는 대상에 변화 발생하면 trigger 모든 변화가 끝난 후에만 한 번 업데이트 하도록
+    // objectChange 대신 mouseUp 이벤트를 사용
+    transformControls.addEventListener('mouseUp', event => {
       const currentIndex = 3      
       // target bone의 속성값을 사용해서 새로운 애니메이션 생성
       createNewAnimation(event.target.object, event.target.mode, currentIndex)
     })
+
 
     // 트랜스폼 컨트롤러 scene에 추가
     scene.add(transformControls)
@@ -240,7 +243,12 @@ function App() {
             if (currentBone !== event.object.parent) {
               transformControls.attach(event.object.parent)
               setCurrentBone(event.object.parent)
+              dragControls.enabled = false
             } 
+          })
+
+          dragControls.addEventListener('dragend', event => {
+            dragControls.enabled = true
           })
         }       
         // scene에 skelton helper 추가
